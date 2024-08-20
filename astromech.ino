@@ -57,27 +57,23 @@ typedef struct {
 } Steering;
 
 Steering s_vals;
-int rightTurnPercent;
+float rightTurnPercent;
 
 void calcSteering(int steeringVal) {
-  if (steeringVal <= 102 && steeringVal >= 100) { // not turning
-    return;
-  } else if (steeringVal < 100) { // turning left
-    s_vals.leftMotorVal *= steeringVal / 100;
-  } else { // turning right
-    rightTurnPercent = map(steeringVal, 104, 180, 0, 100);
+  if (steeringVal < 1610) { // turning left
+    s_vals.leftMotorVal *= float(map(steeringVal, 1114, 1614, 30, 100) / 100.0);
+  } else if (steeringVal > 1620) { // turning right
+    rightTurnPercent = float(map(steeringVal, 1614, 1995, 100, 30)) / 100.0;
     s_vals.rightMotorVal *= rightTurnPercent;
   }
 }
-
 
 int motorVal;
 void loop() {
   motorVal = nearest2(map(receiver.getRaw(3), 1116, 2000, 15, 180));
   s_vals.leftMotorVal = motorVal;
-  s_vals.rightMotorVal = motorVal;
-  calcSteering(nearest2(map(receiver.getRaw(1), 1110, 1995, 0, 179)));
-  Serial.println(s_vals.leftMotorVal);
-  // left.write(motorVal);
-  // right.write(motorVal - 6); // for some reason the right motor starts 6 units ahead of the left
+  s_vals.rightMotorVal = motorVal; // for some reason the right motor starts 6 units ahead of the left
+  calcSteering(nearest2(receiver.getRaw(1)));
+  left.write(s_vals.leftMotorVal);
+  right.write(s_vals.rightMotorVal - 6);
 }
