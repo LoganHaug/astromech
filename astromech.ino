@@ -15,7 +15,7 @@ Servo right;
 RC_Receiver receiver(CH1, CH2, CH3, CH4, CH5, CH6);
 int minMax[6][2] = 
 {
-	{1117,1995}, 
+	{1110,1995}, 
 	{1117,1995}, 
 	{1117,1990}, 
 	{997,1905}, 
@@ -51,10 +51,33 @@ int nearest2(int num) {
   return num - (num % 2);
 }
 
+typedef struct {
+  int leftMotorVal;
+  int rightMotorVal;
+} Steering;
+
+Steering s_vals;
+int rightTurnPercent;
+
+void calcSteering(int steeringVal) {
+  if (steeringVal <= 102 && steeringVal >= 100) { // not turning
+    return;
+  } else if (steeringVal < 100) { // turning left
+    s_vals.leftMotorVal *= steeringVal / 100;
+  } else { // turning right
+    rightTurnPercent = map(steeringVal, 104, 180, 0, 100);
+    s_vals.rightMotorVal *= rightTurnPercent;
+  }
+}
+
+
 int motorVal;
 void loop() {
-  motorVal = nearest2(map(receiver.getRaw(3), 1116, 2000, 0, 180));
-  Serial.println(motorVal);
-  left.write(motorVal);
-  right.write(motorVal);
+  motorVal = nearest2(map(receiver.getRaw(3), 1116, 2000, 15, 180));
+  s_vals.leftMotorVal = motorVal;
+  s_vals.rightMotorVal = motorVal;
+  calcSteering(nearest2(map(receiver.getRaw(1), 1110, 1995, 0, 179)));
+  Serial.println(s_vals.leftMotorVal);
+  // left.write(motorVal);
+  // right.write(motorVal - 6); // for some reason the right motor starts 6 units ahead of the left
 }
