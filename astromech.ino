@@ -1,66 +1,54 @@
-#include <Servo.h>
+#include <Adafruit_PWMServoDriver.h>
 #include <RC_Receiver.h>
+#include <Wire.h>
 
-#define LEFT_PIN 12
-#define RIGHT_PIN 13
+// PCA9685
+Adafruit_PWMServoDriver motor_driver = Adafruit_PWMServoDriver();
+
 
 // right joystick horiz
 #define CH1 3
 // right joystick vert
-#define CH2 5
+// #define CH2
 // left joystick vert
-#define CH3 6
+#define CH3 5
 // left joystick horiz
-#define CH4 9
+// #define CH4 
 // left knob
-#define CH5 10
+#define CH5 6
 // right knob
-#define CH6 11
+// #define CH6 
 #define HEAD_INT_3 7
 #define HEAD_INT_4 8
 
-Servo left;
-Servo right;
-RC_Receiver receiver(CH1, CH2, CH3, CH4, CH5, CH6);
-int minMax[6][2] = 
+// Fly sky FS-IA6
+RC_Receiver receiver(CH1, CH3, CH5);
+int minMax[3][2] = 
 {
-	{1110,1995}, 
-	{1117,1995}, 
-	{1117,1990}, 
-	{997,1905}, 
+	{1116,1996}, 
+	{1096,1995},  
 	{997,1995}, 
-	{997,1995}
 };
-
-void calibrateESC() {
-  stopMotors();
-  delay(800);
-  left.write(180);
-  right.write(180);
-  delay(100);
-  stopMotors();
-}
-
-void stopMotors() {
-  left.write(0);
-  right.write(0);
-}
 
 void setup() {
   Serial.begin(9600);
+  delay(50);
+  Serial.println("arming");
   pinMode(HEAD_INT_3, OUTPUT);
   pinMode(HEAD_INT_4, OUTPUT);
-  receiver.setMinMax(minMax);
-  left.attach(LEFT_PIN, 1000, 2000);
-  right.attach(RIGHT_PIN, 1000, 2000);
   stopHead();
-  calibrateESC();
+  motor_driver.begin();
+  motor_driver.setOscillatorFrequency(26500000);  // chip dependent, test for pwm hz
+  motor_driver.setPWMFreq(50); // PWM Freq of rc electric parts classic esc 30A
+  Wire.setClock(100000); // Normal clock hz
+  delay(100); // allow i2c device to initialize
+  motor_driver.setPWM(0, 0, 207);
+  delay(200);
+  motor_driver.setPWM(0, 0, 410);
+  delay(200);
+  motor_driver.setPWM(0, 0, 207);
   Serial.println("arming complete");
-
-}
-
-int nearest2(int num) {
-  return num - (num % 2);
+  receiver.setMinMax(minMax);
 }
 
 typedef struct {
@@ -70,15 +58,6 @@ typedef struct {
 
 Steering s_vals;
 float rightTurnPercent;
-
-void calcSteering(int steeringVal) {
-  if (steeringVal < 1600) { // turning left
-    s_vals.leftMotorVal *= float(map(steeringVal, 1114, 1614, 30, 100) / 100.0);
-  } else if (steeringVal > 1625) { // turning right
-    rightTurnPercent = float(map(steeringVal, 1614, 1995, 100, 30)) / 100.0;
-    s_vals.rightMotorVal *= rightTurnPercent;
-  }
-}
 
 void stopHead() {
   digitalWrite(HEAD_INT_3, LOW);
@@ -91,11 +70,15 @@ void moveHead(int potVal) {
   if (potVal > 995 && potVal <= 1329) {
     digitalWrite(HEAD_INT_3, LOW);
     digitalWrite(HEAD_INT_4, HIGH);
+    delay(20);
+    stopHead();
   } else if (potVal > 1329 && potVal <= 1663) {
     stopHead();
   } else if (potVal > 1663 && potVal <= 1995) {
     digitalWrite(HEAD_INT_4, LOW);
     digitalWrite(HEAD_INT_3, HIGH);
+    delay(20);
+    stopHead();
   } else {
     stopHead();
   }
@@ -107,23 +90,47 @@ void displayRadioChannels() {
   Serial.print(receiver.getRaw(2));
   Serial.print('\t');
   Serial.print(receiver.getRaw(3));
-  Serial.print('\t');
-  Serial.print(receiver.getRaw(4));
-  Serial.print('\t');
-  Serial.print(receiver.getRaw(5));
-  Serial.print('\t');
-  Serial.print(receiver.getRaw(6));
-  Serial.println('\t');
+  Serial.print('\n');
 }
 
-int motorVal;
+double scale(double num, double fromLow, double fromHigh, double toLow, double toHigh) {
+  return toLow + ((toHigh - toLow) * ((num - fromLow) / (fromHigh - fromLow)));
+}
+
+double witch(double x) {
+  return 1 / (x + 1);
+}
+
+int r_motorVal; // 207 - 411, end milli of pwm wave
+int l_motorVal; // above
+int throttle_pos; // 1094-1995 end ms of pwm wave
+int steering_pos;
+const int deadzone_l = 1506;
+const int deadzone_r = 1606;
+const int center = 1556;
+double steering_perc = 1;
+double proposed_speed_dif;
 void loop() {
-  motorVal = nearest2(map(receiver.getRaw(3), 1116, 2000, 15, 60));
-  s_vals.leftMotorVal = motorVal + 6;
-  s_vals.rightMotorVal = motorVal;
-  calcSteering(nearest2(receiver.getRaw(1)));
-  left.write(s_vals.leftMotorVal);
-  right.write(s_vals.rightMotorVal);
+  
   // displayRadioChannels();
-  moveHead(receiver.getRaw(5));
+  moveHead(receiver.getRaw(3));
+  throttle_pos = receiver.getRaw(2);
+  steering_pos = receiver.getRaw(1);
+  r_motorVal = scale(throttle_pos, 1094, 1995, 207, 411);
+  l_motorVal = r_motorVal&;
+  if (steering_pos < deadzone_l) {  // steer left
+    proposed_speed_dif = r_motorVal - scale(steering_pos, 1094, deadzone_l, 207, l_motorVal);
+    steering_perc = witch(scale(r_motorVal, 207, 411, 0, 6));
+    l_motorVal = r_motorVal - (proposed_speed_dif * steering_perc);
+  }
+  else if (steering_pos > deadzone_r) { // steer right
+    proposed_speed_dif = l_motorVal - scale(steering_pos, deadzone_r, 1995, 207, l_motorVal);
+    steering_perc = witch(scale(l_motorVal, 207, 411, 0, 6));
+    r_motorVal = l_motorVal - (proposed_speed_dif * steering_perc);
+  }
+
+  motor_driver.setPWM(0, 0, r_motorVal);
+  motor_driver.setPWM(1, 0, l_motorVal);
+  Serial.println(r_motorVal);
+  delay(20);
 }
