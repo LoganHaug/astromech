@@ -34,7 +34,6 @@ void setup() {
   Serial.begin(9600);
   delay(50);
   Serial.println("arming");
-  /*
   pinMode(HEAD_INT_3, OUTPUT);
   pinMode(HEAD_INT_4, OUTPUT);
   stopHead();
@@ -49,7 +48,6 @@ void setup() {
   delay(200);
   motor_driver.setPWM(0, 0, 207);
   Serial.println("arming complete");
-  */
   receiver.setMinMax(minMax);
 }
 
@@ -105,11 +103,11 @@ double witch(double x) {
 
 int r_motorVal; // 207 - 411, end milli of pwm wave
 int l_motorVal; // above
-int throttle_pos; // 1094-1995 end ms of pwm wave
-int steering_pos; // 997 - 1909
-const int deadzone_l = 1380;
-const int deadzone_r = 1436;
-const int center = 1408;
+int throttle_pos; // 997-1995 end ms of pwm wave
+int steering_pos; // 1000 - 1995
+const int deadzone_l = 1400;
+const int deadzone_r = 1600;
+const int center = 1500;
 double steering_perc = 1;
 double proposed_speed_dif;
 
@@ -123,21 +121,19 @@ void displayMotorVals() {
 
 
 void loop() {
-  
-  // displayRadioChannels();
   moveHead(receiver.getRaw(3));
   throttle_pos = receiver.getRaw(2);
   steering_pos = receiver.getRaw(1);
-  r_motorVal = floor(scale(throttle_pos, 1094, 1995, 207, 411));
+  r_motorVal = floor(scale(throttle_pos, 1000, 1995, 210, 411));
   l_motorVal = r_motorVal;
   if (steering_pos < deadzone_l) {  // steer left
-    proposed_speed_dif = r_motorVal - scale(steering_pos, 997, deadzone_l, 207, l_motorVal);
-    steering_perc = witch(scale(r_motorVal, 207, 411, 0, 6));
+    proposed_speed_dif = r_motorVal - scale(steering_pos, 1000, deadzone_l, 200, l_motorVal);
+    steering_perc = witch(scale(r_motorVal, 200, 411, 0, 6));
     l_motorVal = r_motorVal - (proposed_speed_dif * steering_perc);
   }
   else if (steering_pos > deadzone_r) { // steer right
-    proposed_speed_dif = l_motorVal - scale(steering_pos, 1909, deadzone_r, 207, l_motorVal);
-    steering_perc = witch(scale(l_motorVal, 207, 411, 0, 6));
+    proposed_speed_dif = l_motorVal - scale(steering_pos, 1995, deadzone_r, 200, l_motorVal);
+    steering_perc = witch(scale(l_motorVal, 200, 411, 0, 6));
     r_motorVal = l_motorVal - floor(proposed_speed_dif * steering_perc);
   }
 
