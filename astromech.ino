@@ -101,8 +101,8 @@ double witch(double x) {
   return 1 / (x + 1);
 }
 
-int r_motorVal; // 207 - 411, end milli of pwm wave
-int l_motorVal; // above
+int r_motorVal; // 226 - 410, end milli of pwm wave
+int l_motorVal; // 228 - 410
 int throttle_pos; // 997-1995 end ms of pwm wave
 int steering_pos; // 1000 - 1995
 const int deadzone_l = 1400;
@@ -137,9 +137,9 @@ void loop() {
     r_motorVal = l_motorVal - floor(proposed_speed_dif * steering_perc);
   }
 
-  // motor_driver.setPWM(0, 0, r_motorVal);
-  // motor_driver.setPWM(1, 0, l_motorVal);
+  motor_driver.setPWM(0, 0, r_motorVal);
+  motor_driver.setPWM(1, 0, l_motorVal + 2);
   // displayRadioChannels();
-  displayMotorVals();
-  delay(20);
+  // displayMotorVals();
+  delay(20); // adafruit servo hat reads every 20 ms
 }
